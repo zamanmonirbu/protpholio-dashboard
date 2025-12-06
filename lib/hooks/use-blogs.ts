@@ -1,0 +1,122 @@
+"use client"
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { apiClient } from "@/lib/api-client"
+
+export interface Blog {
+  _id: string
+  title: string
+  content: string
+  excerpt?: string
+  slug: string
+  published: boolean
+  author?: string
+  tags?: string[]
+  featuredImage?: string
+  cloudinaryId?: string
+  reader?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateBlogPayload {
+  title: string
+  content: string
+  excerpt?: string
+  slug?: string
+  published?: boolean
+  author?: string
+  tags?: string[]
+  featuredImage?: File
+}
+
+export function useBlogs() {
+  return useQuery({
+    queryKey: ["blogs"],
+    queryFn: async () => {
+      const response = await apiClient.get<Blog[]>("/blog")
+      return response.data
+    },
+  })
+}
+
+export function useBlog(id: string) {
+
+  console.log("id",id)
+
+  return useQuery({
+    queryKey: ["blog", id],
+    queryFn: async () => {
+      const response = await apiClient.get<Blog>(`/blog/${id}`)
+
+      console.log(response.data, "id", id)
+
+      return response.data
+    },
+    enabled: !!id,
+  })
+}
+
+export function useCreateBlog() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: CreateBlogPayload) => {
+      const formData = new FormData()
+      formData.append("title", payload.title)
+      formData.append("content", payload.content)
+      if (payload.excerpt) formData.append("excerpt", payload.excerpt)
+      if (payload.slug) formData.append("slug", payload.slug)
+      if (payload.published !== undefined) formData.append("published", String(payload.published))
+      if (payload.author) formData.append("author", payload.author)
+      if (payload.tags?.length) formData.append("tags", JSON.stringify(payload.tags))
+      if (payload.featuredImage) formData.append("featuredImage", payload.featuredImage)
+
+      const response = await apiClient.post<Blog>("/blog", formData, true)
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["blogs"] })
+    },
+  })
+}
+
+export function useUpdateBlog() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: Partial<CreateBlogPayload> }) => {
+      const formData = new FormData()
+      if (payload.title) formData.append("title", payload.title)
+      if (payload.content) formData.append("content", payload.content)
+      if (payload.excerpt) formData.append("excerpt", payload.excerpt)
+      if (payload.slug) formData.append("slug", payload.slug)
+      if (payload.published !== undefined) formData.append("published", String(payload.published))
+      if (payload.author) formData.append("author", payload.author)
+      if (payload.tags?.length) formData.append("tags", JSON.stringify(payload.tags))
+      if (payload.featuredImage) formData.append("featuredImage", payload.featuredImage)
+
+      const response = await apiClient.put<Blog>(`/blog/${id}`, formData, true)
+
+      console.log("response",response)
+
+      return response.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["blogs"] })
+    },
+  })
+}
+
+export function useDeleteBlog() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete<void>(`/blog/${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["blogs"] })
+    },
+  })
+}
