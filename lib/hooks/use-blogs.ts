@@ -42,15 +42,10 @@ export function useBlogs() {
 
 export function useBlog(id: string) {
 
-  console.log("id",id)
-
   return useQuery({
     queryKey: ["blog", id],
     queryFn: async () => {
       const response = await apiClient.get<Blog>(`/blog/${id}`)
-
-      console.log(response.data, "id", id)
-
       return response.data
     },
     enabled: !!id,
@@ -97,8 +92,6 @@ export function useUpdateBlog() {
       if (payload.featuredImage) formData.append("featuredImage", payload.featuredImage)
 
       const response = await apiClient.put<Blog>(`/blog/${id}`, formData, true)
-
-      console.log("response",response)
 
       return response.data
     },

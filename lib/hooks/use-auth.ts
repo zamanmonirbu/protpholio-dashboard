@@ -1,3 +1,4 @@
+// lib/hooks/use-auth.ts
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -80,16 +81,20 @@ export function useUser() {
   })
 }
 
+// UPDATED: Now uses apiClient + supports FormData (image upload)
 export function useUpdateUser() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (payload: Partial<User>) => {
-      const response = await apiClient.put<User>("/user/me", payload)
+    mutationFn: async (formData: FormData) => {
+      const response = await apiClient.put<User>("/user/me", formData, true) 
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (updatedUser) => {
+      queryClient.setQueryData(["user"], updatedUser)
       queryClient.invalidateQueries({ queryKey: ["user"] })
+    },
+    onError: (error: any) => {
     },
   })
 }

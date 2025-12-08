@@ -18,14 +18,14 @@ export default function ProfilePage() {
 
   const [isEditMode, setIsEditMode] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null) // ← Critical
 
   const [formData, setFormData] = useState({
     name: "",
     bio: "",
     about: "",
-    profilePicture: "",
     skills: [] as string[],
-    socialLinks: [] as { platform: string; url: string; icon: string }[],
+    socialLinks: [] as { platform: string; url: string; icon?: string }[],
     education: [] as { institution: string; degree: string; timePeriod: string }[],
     workExperience: [] as {
       title: string
@@ -36,33 +36,34 @@ export default function ProfilePage() {
     }[],
   })
 
+  // Populate form when user loads
   useEffect(() => {
     if (user) {
       setFormData({
         name: user.name || "",
         bio: user.bio || "",
         about: user.about || "",
-        profilePicture: user.profilePicture || "",
         skills: user.skills || [],
-        socialLinks: (user.socialLinks || []).map((link: any) => ({
-          platform: link.platform || "",
-          url: link.url || "",
-          icon: link.icon || "",
+        socialLinks: (user.socialLinks || []).map((l: any) => ({
+          platform: l.platform || "",
+          url: l.url || "",
+          icon: l.icon || "",
         })),
-        education: (user.education || []).map((edu: any) => ({
-          institution: edu.institution || "",
-          degree: edu.degree || "",
-          timePeriod: edu.timePeriod || "",
+        education: (user.education || []).map((e: any) => ({
+          institution: e.institution || "",
+          degree: e.degree || "",
+          timePeriod: e.timePeriod || "",
         })),
-        workExperience: (user.workExperience || []).map((job: any) => ({
-          title: job.title || "",
-          designation: job.designation || "",
-          location: job.location || "",
-          timePeriod: job.timePeriod || "",
-          details: job.details || "",
+        workExperience: (user.workExperience || []).map((w: any) => ({
+          title: w.title || "",
+          designation: w.designation || "",
+          location: w.location || "",
+          timePeriod: w.timePeriod || "",
+          details: w.details || "",
         })),
       })
       setImagePreview(null)
+      setSelectedFile(null)
     }
   }, [user])
 
@@ -79,28 +80,44 @@ export default function ProfilePage() {
       return
     }
 
+    setSelectedFile(file)
+
     const reader = new FileReader()
-    reader.onloadend = () => {
-      const result = reader.result as string
-      setImagePreview(result)
-      setFormData(prev => ({ ...prev, profilePicture: result }))
-    }
+    reader.onloadend = () => setImagePreview(reader.result as string)
     reader.readAsDataURL(file)
   }
 
   const handleRemoveImage = () => {
     setImagePreview(null)
-    setFormData(prev => ({ ...prev, profilePicture: "" }))
+    setSelectedFile(null)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    updateUser(formData, {
+
+    const submitData = new FormData()
+
+    // Append all text fields as strings
+    submitData.append("name", formData.name)
+    submitData.append("bio", formData.bio)
+    submitData.append("about", formData.about)
+    submitData.append("skills", JSON.stringify(formData.skills))
+    submitData.append("socialLinks", JSON.stringify(formData.socialLinks))
+    submitData.append("education", JSON.stringify(formData.education))
+    submitData.append("workExperience", JSON.stringify(formData.workExperience))
+
+    // Only append file if a new one was selected
+    if (selectedFile) {
+      submitData.append("profile", selectedFile)
+    }
+
+    updateUser(submitData, {
       onSuccess: () => {
         toast({ title: "Success", description: "Profile updated successfully!" })
         setIsEditMode(false)
         setImagePreview(null)
+        setSelectedFile(null)
       },
       onError: (err: any) => {
         toast({ title: "Error", description: err.message || "Failed to update", variant: "destructive" })
@@ -109,9 +126,11 @@ export default function ProfilePage() {
   }
 
   const handleArrayChange = (key: keyof typeof formData, index: number, field: string, value: string) => {
-    const updated = [...formData[key] as any[]]
-    updated[index][field] = value
-    setFormData(prev => ({ ...prev, [key]: updated }))
+    setFormData(prev => {
+      const updated = [...(prev[key] as any[])];
+      (updated[index] as any)[field] = value;
+      return { ...prev, [key]: updated };
+    })
   }
 
   const handleAddItem = (key: keyof typeof formData, item: any) => {
@@ -129,22 +148,14 @@ export default function ProfilePage() {
     return <div className="py-20 text-center text-muted-foreground">Loading profile...</div>
   }
 
-  const displayImage = imagePreview || formData.profilePicture
+  const displayImage = imagePreview || user?.profilePicture
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-10">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-bold">My Profile</h1>
         {isEditMode ? (
-          <Button
-            variant="outline"
-            onClick={() => {
-              setIsEditMode(false)
-              setImagePreview(null)
-            }}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={() => { setIsEditMode(false); setImagePreview(null); setSelectedFile(null); }} className="gap-2">
             <X size={18} /> Cancel
           </Button>
         ) : (
@@ -163,21 +174,21 @@ export default function ProfilePage() {
         </CardHeader>
 
         <CardContent className="space-y-12">
-          {/* ==================== PROFILE PICTURE + HEADER ==================== */}
+          {/* Profile Picture */}
           <div className="flex flex-col md:flex-row items-center gap-8 pb-8 border-b">
             <div className="relative group">
               {displayImage ? (
                 <Image
                   src={displayImage}
-                  alt="Profile picture"
-                  width={80}
-                  height={80}
-                  className="rounded-full w-32 h-32 border-4 border-background shadow-2xl"
+                  alt="Profile"
+                  width={128}
+                  height={128}
+                  className="rounded-full w-32 h-32 object-cover border-4 border-background shadow-2xl"
                   priority
                 />
               ) : (
-                <div className="w-44 h-44 rounded-full bg-muted flex items-center justify-center">
-                  <User className="w-20 h-20 text-muted-foreground" />
+                <div className="w-32 h-32 rounded-full bg-muted flex items-center justify-center">
+                  <User className="w-16 h-16 text-muted-foreground" />
                 </div>
               )}
 
@@ -191,7 +202,6 @@ export default function ProfilePage() {
                 </button>
               )}
             </div>
-
 
             <div className="text-center md:text-left space-y-3">
               {!isEditMode ? (
@@ -208,52 +218,40 @@ export default function ProfilePage() {
                     onChange={handleImageChange}
                     className="hidden"
                   />
-                  <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
-                    <Upload size={16} /> Change Photo
-                  </Button>
-                  {displayImage && (
-                    <Button variant="destructive" size="sm" onClick={handleRemoveImage} className="ml-3 gap-2">
-                      <Trash2 size={16} /> Remove Photo
+                  <div className="flex gap-3">
+                    <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
+                      <Upload size={16} /> Change Photo
                     </Button>
-                  )}
+                    {selectedFile && (
+                      <Button variant="destructive" size="sm" onClick={handleRemoveImage} className="gap-2">
+                        <Trash2 size={16} /> Remove
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">Max 5MB • JPG, PNG, GIF</p>
                 </>
               )}
             </div>
           </div>
 
-          {/* ==================== EDIT MODE ==================== */}
+          {/* Edit Mode Form */}
           {isEditMode ? (
             <form onSubmit={handleSubmit} className="space-y-10">
-
               {/* Name & Bio */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="text-sm font-medium">Full Name</label>
-                  <Input
-                    value={formData.name}
-                    onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="John Doe"
-                  />
+                  <Input value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Bio</label>
-                  <Input
-                    value={formData.bio}
-                    onChange={e => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-                    placeholder="MERN Developer | Teacher | Creator"
-                  />
+                  <Input value={formData.bio} onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))} />
                 </div>
               </div>
 
               <div>
                 <label className="text-sm font-medium">About Me</label>
-                <Textarea
-                  rows={6}
-                  value={formData.about}
-                  onChange={e => setFormData(prev => ({ ...prev, about: e.target.value }))}
-                  placeholder="Tell us about yourself..."
-                />
+                <Textarea rows={6} value={formData.about} onChange={e => setFormData(p => ({ ...p, about: e.target.value }))} />
               </div>
 
               {/* Skills */}

@@ -15,7 +15,7 @@ export default function AdminError({
   const router = useRouter()
 
   useEffect(() => {
-    console.error("[v0] Error:", error)
+    console.error("Error:", error)
   }, [error])
 
   return (
