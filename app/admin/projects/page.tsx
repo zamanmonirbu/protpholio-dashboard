@@ -28,7 +28,7 @@ export default function ProjectsPage() {
             <CardTitle>Create New Project</CardTitle>
           </CardHeader>
           <CardContent>
-            <ProjectForm onSuccess={() => setShowForm(false)} />
+            <ProjectForm onSuccess={() => setShowForm(false)} name={""} description={""} liveLink={""} frontendCode={""} backendCode={""} />
           </CardContent>
         </Card>
       )}

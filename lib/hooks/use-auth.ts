@@ -14,6 +14,8 @@ export interface User {
   email: string
   name: string
   profilePicture?: string
+  logo?: string                
+  logoCloudinaryId?: string    
   bio?: string
   about?: string
   createdAt: string
@@ -33,7 +35,10 @@ export interface User {
     timePeriod: string
   }>
 
-  skills?: string[]
+  skills?: {
+    skillTile: string
+    skillName: string[]
+  }[]
 
   workExperience?: Array<{
     _id?: string
@@ -81,20 +86,17 @@ export function useUser() {
   })
 }
 
-// UPDATED: Now uses apiClient + supports FormData (image upload)
 export function useUpdateUser() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await apiClient.put<User>("/user/me", formData, true) 
+      const response = await apiClient.put<User>("/user/me", formData, true)
       return response.data
     },
     onSuccess: (updatedUser) => {
       queryClient.setQueryData(["user"], updatedUser)
       queryClient.invalidateQueries({ queryKey: ["user"] })
-    },
-    onError: (error: any) => {
     },
   })
 }

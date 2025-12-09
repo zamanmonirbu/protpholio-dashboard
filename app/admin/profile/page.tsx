@@ -6,25 +6,35 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { Edit2, X, Upload, User, Trash2 } from "lucide-react"
+import { Edit2, X, Upload, User, Trash2, Plus } from "lucide-react"
 import React, { useEffect, useState, useRef } from "react"
 import Image from "next/image"
+import dynamic from "next/dynamic"
+
+// Dynamic import ReactQuill to avoid SSR issues
+const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false })
+import "react-quill-new/dist/quill.snow.css"
 
 export default function ProfilePage() {
   const { data: user, isLoading } = useUser()
   const { mutate: updateUser, isPending } = useUpdateUser()
   const { toast } = useToast()
-  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const profileFileInputRef = useRef<HTMLInputElement>(null)
+  const logoFileInputRef = useRef<HTMLInputElement>(null)
 
   const [isEditMode, setIsEditMode] = useState(false)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null) // ← Critical
+
+  const [profilePreview, setProfilePreview] = useState<string | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [selectedProfileFile, setSelectedProfileFile] = useState<File | null>(null)
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null)
 
   const [formData, setFormData] = useState({
     name: "",
     bio: "",
     about: "",
-    skills: [] as string[],
+    skills: [] as { skillTile: string; skillName: string[] }[],
     socialLinks: [] as { platform: string; url: string; icon?: string }[],
     education: [] as { institution: string; degree: string; timePeriod: string }[],
     workExperience: [] as {
@@ -32,11 +42,10 @@ export default function ProfilePage() {
       designation: string
       location: string
       timePeriod: string
-      details: string
+      details: string  // Now rich text (HTML string)
     }[],
   })
 
-  // Populate form when user loads
   useEffect(() => {
     if (user) {
       setFormData({
@@ -62,15 +71,21 @@ export default function ProfilePage() {
           details: w.details || "",
         })),
       })
-      setImagePreview(null)
-      setSelectedFile(null)
+      setProfilePreview(null)
+      setLogoPreview(null)
+      setSelectedProfileFile(null)
+      setSelectedLogoFile(null)
     }
   }, [user])
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: "profile" | "logo",
+    setPreview: React.Dispatch<React.SetStateAction<string | null>>,
+    setFile: React.Dispatch<React.SetStateAction<File | null>>
+  ) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     if (!file.type.startsWith("image/")) {
       toast({ title: "Invalid file", description: "Please upload an image", variant: "destructive" })
       return
@@ -79,26 +94,26 @@ export default function ProfilePage() {
       toast({ title: "Too large", description: "Image must be under 5MB", variant: "destructive" })
       return
     }
-
-    setSelectedFile(file)
-
+    setFile(file)
     const reader = new FileReader()
-    reader.onloadend = () => setImagePreview(reader.result as string)
+    reader.onloadend = () => setPreview(reader.result as string)
     reader.readAsDataURL(file)
   }
 
-  const handleRemoveImage = () => {
-    setImagePreview(null)
-    setSelectedFile(null)
-    if (fileInputRef.current) fileInputRef.current.value = ""
+  const handleRemoveFile = (
+    setPreview: React.Dispatch<React.SetStateAction<string | null>>,
+    setFile: React.Dispatch<React.SetStateAction<File | null>>,
+    inputRef: React.RefObject<HTMLInputElement | null>
+  ) => {
+    setPreview(null)
+    setFile(null)
+    if (inputRef.current) inputRef.current.value = ""
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
     const submitData = new FormData()
-
-    // Append all text fields as strings
     submitData.append("name", formData.name)
     submitData.append("bio", formData.bio)
     submitData.append("about", formData.about)
@@ -107,17 +122,17 @@ export default function ProfilePage() {
     submitData.append("education", JSON.stringify(formData.education))
     submitData.append("workExperience", JSON.stringify(formData.workExperience))
 
-    // Only append file if a new one was selected
-    if (selectedFile) {
-      submitData.append("profile", selectedFile)
-    }
+    if (selectedProfileFile) submitData.append("profile", selectedProfileFile)
+    if (selectedLogoFile) submitData.append("logo", selectedLogoFile)
 
     updateUser(submitData, {
       onSuccess: () => {
         toast({ title: "Success", description: "Profile updated successfully!" })
         setIsEditMode(false)
-        setImagePreview(null)
-        setSelectedFile(null)
+        setProfilePreview(null)
+        setLogoPreview(null)
+        setSelectedProfileFile(null)
+        setSelectedLogoFile(null)
       },
       onError: (err: any) => {
         toast({ title: "Error", description: err.message || "Failed to update", variant: "destructive" })
@@ -127,9 +142,9 @@ export default function ProfilePage() {
 
   const handleArrayChange = (key: keyof typeof formData, index: number, field: string, value: string) => {
     setFormData(prev => {
-      const updated = [...(prev[key] as any[])];
-      (updated[index] as any)[field] = value;
-      return { ...prev, [key]: updated };
+      const updated = [...(prev[key] as any[])]
+      ;(updated[index] as any)[field] = value
+      return { ...prev, [key]: updated }
     })
   }
 
@@ -144,18 +159,45 @@ export default function ProfilePage() {
     }))
   }
 
+  const addSkillName = (groupIndex: number) => {
+    setFormData(prev => {
+      const updated = [...prev.skills]
+      updated[groupIndex].skillName.push("")
+      return { ...prev, skills: updated }
+    })
+  }
+
+  const removeSkillName = (groupIndex: number, skillIndex: number) => {
+    setFormData(prev => {
+      const updated = [...prev.skills]
+      updated[groupIndex].skillName.splice(skillIndex, 1)
+      return { ...prev, skills: updated }
+    })
+  }
+
   if (isLoading) {
     return <div className="py-20 text-center text-muted-foreground">Loading profile...</div>
   }
 
-  const displayImage = imagePreview || user?.profilePicture
+  const displayProfileImage = profilePreview || user?.profilePicture
+  const displayLogo = logoPreview || user?.logo
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-10">
       <div className="flex items-center justify-between">
         <h1 className="text-4xl font-bold">My Profile</h1>
         {isEditMode ? (
-          <Button variant="outline" onClick={() => { setIsEditMode(false); setImagePreview(null); setSelectedFile(null); }} className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setIsEditMode(false)
+              setProfilePreview(null)
+              setLogoPreview(null)
+              setSelectedProfileFile(null)
+              setSelectedLogoFile(null)
+            }}
+            className="gap-2"
+          >
             <X size={18} /> Cancel
           </Button>
         ) : (
@@ -174,62 +216,114 @@ export default function ProfilePage() {
         </CardHeader>
 
         <CardContent className="space-y-12">
-          {/* Profile Picture */}
-          <div className="flex flex-col md:flex-row items-center gap-8 pb-8 border-b">
-            <div className="relative group">
-              {displayImage ? (
-                <Image
-                  src={displayImage}
-                  alt="Profile"
-                  width={128}
-                  height={128}
-                  className="rounded-full w-32 h-32 object-cover border-4 border-background shadow-2xl"
-                  priority
-                />
-              ) : (
-                <div className="w-32 h-32 rounded-full bg-muted flex items-center justify-center">
-                  <User className="w-16 h-16 text-muted-foreground" />
+          {/* Profile Picture & Logo */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pb-8 border-b">
+            {/* Profile Picture */}
+            <div className="flex flex-col items-center gap-6">
+              <div className="relative group">
+                {displayProfileImage ? (
+                  <Image
+                    src={displayProfileImage}
+                    alt="Profile"
+                    width={140}
+                    height={140}
+                    className="rounded-full w-36 h-36 object-cover border-4 border-background shadow-2xl"
+                    priority
+                  />
+                ) : (
+                  <div className="w-36 h-36 rounded-full bg-muted flex items-center justify-center">
+                    <User className="w-20 h-20 text-muted-foreground" />
+                  </div>
+                )}
+                {isEditMode && (
+                  <button
+                    type="button"
+                    onClick={() => profileFileInputRef.current?.click()}
+                    className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"
+                  >
+                    <Upload className="w-12 h-12 text-white" />
+                  </button>
+                )}
+              </div>
+              {isEditMode ? (
+                <div className="text-center space-y-3">
+                  <input
+                    ref={profileFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileChange(e, "profile", setProfilePreview, setSelectedProfileFile)}
+                    className="hidden"
+                  />
+                  <Button onClick={() => profileFileInputRef.current?.click()} size="sm" className="gap-2">
+                    <Upload size={16} /> Change Profile
+                  </Button>
+                  {selectedProfileFile && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemoveFile(setProfilePreview, setSelectedProfileFile, profileFileInputRef)}
+                    >
+                      Remove
+                    </Button>
+                  )}
                 </div>
-              )}
-
-              {isEditMode && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"
-                >
-                  <Upload className="w-10 h-10 text-white" />
-                </button>
+              ) : (
+                <p className="text-lg font-medium">{user?.name}</p>
               )}
             </div>
 
-            <div className="text-center md:text-left space-y-3">
-              {!isEditMode ? (
-                <>
-                  <h2 className="text-4xl font-bold">{user?.name}</h2>
-                  <p className="text-xl text-primary">{user?.bio || "No bio yet"}</p>
-                </>
-              ) : (
-                <>
+            {/* Logo */}
+            <div className="flex flex-col items-center gap-6">
+              <div className="relative group">
+                {displayLogo ? (
+                  <Image
+                    src={displayLogo}
+                    alt="Logo"
+                    width={140}
+                    height={140}
+                    className="rounded-full w-36 h-36 object-cover border-4 border-background shadow-2xl"
+                    priority
+                  />
+                ) : (
+                  <div className="w-36 h-36 rounded-full bg-muted flex items-center justify-center">
+                    <span className="text-4xl font-bold text-muted-foreground">M</span>
+                  </div>
+                )}
+                {isEditMode && (
+                  <button
+                    type="button"
+                    onClick={() => logoFileInputRef.current?.click()}
+                    className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"
+                  >
+                    <Upload className="w-12 h-12 text-white" />
+                  </button>
+                )}
+              </div>
+              {isEditMode ? (
+                <div className="text-center space-y-3">
                   <input
-                    ref={fileInputRef}
+                    ref={logoFileInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={handleImageChange}
+                    onChange={(e) => handleFileChange(e, "logo", setLogoPreview, setSelectedLogoFile)}
                     className="hidden"
                   />
-                  <div className="flex gap-3">
-                    <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
-                      <Upload size={16} /> Change Photo
+                  <Button onClick={() => logoFileInputRef.current?.click()} size="sm" className="gap-2">
+                    <Upload size={16} /> Change Logo
+                  </Button>
+                  {selectedLogoFile && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemoveFile(setLogoPreview, setSelectedLogoFile, logoFileInputRef)}
+                    >
+                      Remove
                     </Button>
-                    {selectedFile && (
-                      <Button variant="destructive" size="sm" onClick={handleRemoveImage} className="gap-2">
-                        <Trash2 size={16} /> Remove
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Max 5MB • JPG, PNG, GIF</p>
-                </>
+                  )}
+                  <p className="text-xs text-muted-foreground">Used in navigation & footer</p>
+                </div>
+              ) : (
+                <p className="text-lg font-medium">Your Logo</p>
               )}
             </div>
           </div>
@@ -241,41 +335,61 @@ export default function ProfilePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="text-sm font-medium">Full Name</label>
-                  <Input value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} />
+                  <Input value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Bio</label>
-                  <Input value={formData.bio} onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))} />
+                  <Input value={formData.bio} onChange={(e) => setFormData(p => ({ ...p, bio: e.target.value }))} />
                 </div>
               </div>
 
               <div>
                 <label className="text-sm font-medium">About Me</label>
-                <Textarea rows={6} value={formData.about} onChange={e => setFormData(p => ({ ...p, about: e.target.value }))} />
+                <Textarea rows={6} value={formData.about} onChange={(e) => setFormData(p => ({ ...p, about: e.target.value }))} />
               </div>
 
               {/* Skills */}
               <div>
                 <label className="text-sm font-medium">Skills</label>
-                <div className="mt-3 space-y-3">
-                  {formData.skills.map((skill, i) => (
-                    <div key={i} className="flex gap-3">
-                      <Input
-                        value={skill}
-                        onChange={e => {
-                          const updated = [...formData.skills]
-                          updated[i] = e.target.value
-                          setFormData(prev => ({ ...prev, skills: updated }))
-                        }}
-                        placeholder="React, TypeScript..."
-                      />
-                      <Button type="button" variant="destructive" size="sm" onClick={() => handleRemoveItem("skills", i)}>
-                        Remove
-                      </Button>
+                <div className="mt-4 space-y-6">
+                  {formData.skills.map((group, groupIdx) => (
+                    <div key={groupIdx} className="p-5 border rounded-lg bg-muted/40">
+                      <div className="flex justify-between items-center mb-4">
+                        <Input
+                          placeholder="Category (e.g. Frontend, Backend)"
+                          value={group.skillTile || ""}
+                          onChange={(e) => handleArrayChange("skills", groupIdx, "skillTile", e.target.value)}
+                          className="max-w-md"
+                        />
+                        <Button type="button" variant="destructive" size="sm" onClick={() => handleRemoveItem("skills", groupIdx)}>
+                          Remove Group
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        {group.skillName.map((skill, skillIdx) => (
+                          <div key={skillIdx} className="flex gap-3">
+                            <Input
+                              value={skill}
+                              onChange={(e) => {
+                                const updated = [...formData.skills]
+                                updated[groupIdx].skillName[skillIdx] = e.target.value
+                                setFormData(prev => ({ ...prev, skills: updated }))
+                              }}
+                              placeholder="React, TypeScript..."
+                            />
+                            <Button type="button" variant="outline" size="icon" onClick={() => removeSkillName(groupIdx, skillIdx)}>
+                              <X size={16} />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" onClick={() => addSkillName(groupIdx)} className="gap-2">
+                          <Plus size={16} /> Add Skill
+                        </Button>
+                      </div>
                     </div>
                   ))}
-                  <Button type="button" variant="outline" size="sm" onClick={() => handleAddItem("skills", "")}>
-                    + Add Skill
+                  <Button type="button" variant="outline" onClick={() => handleAddItem("skills", { skillTile: "", skillName: [""] })}>
+                    + Add Skill Group
                   </Button>
                 </div>
               </div>
@@ -287,16 +401,10 @@ export default function ProfilePage() {
                   {formData.socialLinks.map((link, idx) => (
                     <div key={idx} className="p-5 border rounded-lg bg-muted/40">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <Input placeholder="Platform" value={link.platform} onChange={e => handleArrayChange("socialLinks", idx, "platform", e.target.value)} />
-                        <Input placeholder="URL" value={link.url} onChange={e => handleArrayChange("socialLinks", idx, "url", e.target.value)} />
-                        <Input placeholder="fab fa-github" value={link.icon} onChange={e => handleArrayChange("socialLinks", idx, "icon", e.target.value)} />
+                        <Input placeholder="Platform" value={link.platform} onChange={(e) => handleArrayChange("socialLinks", idx, "platform", e.target.value)} />
+                        <Input placeholder="URL" value={link.url} onChange={(e) => handleArrayChange("socialLinks", idx, "url", e.target.value)} />
+                        <Input placeholder="fab fa-github" value={link.icon || ""} onChange={(e) => handleArrayChange("socialLinks", idx, "icon", e.target.value)} />
                       </div>
-                      {link.icon && (
-                        <div className="mt-4 flex items-center gap-3">
-                          <i className={`${link.icon} text-2xl`} />
-                          <span>{link.platform}</span>
-                        </div>
-                      )}
                       <div className="mt-4 text-right">
                         <Button type="button" variant="destructive" size="sm" onClick={() => handleRemoveItem("socialLinks", idx)}>
                           Remove
@@ -315,9 +423,9 @@ export default function ProfilePage() {
                 <label className="text-sm font-medium">Education</label>
                 {formData.education.map((edu, i) => (
                   <div key={i} className="mt-4 p-5 border rounded-lg space-y-4">
-                    <Input placeholder="Institution" value={edu.institution} onChange={e => handleArrayChange("education", i, "institution", e.target.value)} />
-                    <Input placeholder="Degree" value={edu.degree} onChange={e => handleArrayChange("education", i, "degree", e.target.value)} />
-                    <Input placeholder="2018 - 2024" value={edu.timePeriod} onChange={e => handleArrayChange("education", i, "timePeriod", e.target.value)} />
+                    <Input placeholder="Institution" value={edu.institution} onChange={(e) => handleArrayChange("education", i, "institution", e.target.value)} />
+                    <Input placeholder="Degree" value={edu.degree} onChange={(e) => handleArrayChange("education", i, "degree", e.target.value)} />
+                    <Input placeholder="2018 - 2024" value={edu.timePeriod} onChange={(e) => handleArrayChange("education", i, "timePeriod", e.target.value)} />
                     <Button type="button" variant="destructive" size="sm" onClick={() => handleRemoveItem("education", i)}>
                       Remove
                     </Button>
@@ -333,11 +441,32 @@ export default function ProfilePage() {
                 <label className="text-sm font-medium">Work Experience</label>
                 {formData.workExperience.map((job, i) => (
                   <div key={i} className="mt-4 p-5 border rounded-lg space-y-4">
-                    <Input placeholder="Job Title" value={job.title} onChange={e => handleArrayChange("workExperience", i, "title", e.target.value)} />
-                    <Input placeholder="Designation" value={job.designation} onChange={e => handleArrayChange("workExperience", i, "designation", e.target.value)} />
-                    <Input placeholder="Location" value={job.location} onChange={e => handleArrayChange("workExperience", i, "location", e.target.value)} />
-                    <Input placeholder="Time Period" value={job.timePeriod} onChange={e => handleArrayChange("workExperience", i, "timePeriod", e.target.value)} />
-                    <Textarea placeholder="Details..." rows={4} value={job.details} onChange={e => handleArrayChange("workExperience", i, "details", e.target.value)} />
+                    <Input placeholder="Job Title" value={job.title} onChange={(e) => handleArrayChange("workExperience", i, "title", e.target.value)} />
+                    <Input placeholder="Designation" value={job.designation} onChange={(e) => handleArrayChange("workExperience", i, "designation", e.target.value)} />
+                    <Input placeholder="Location" value={job.location} onChange={(e) => handleArrayChange("workExperience", i, "location", e.target.value)} />
+                    <Input placeholder="Time Period" value={job.timePeriod} onChange={(e) => handleArrayChange("workExperience", i, "timePeriod", e.target.value)} />
+
+                    {/* Rich Text Editor for Details */}
+                    <div>
+                      <label className="text-sm font-medium">Details</label>
+                      <div className="mt-2 border rounded-lg overflow-hidden">
+                        <ReactQuill
+                          theme="snow"
+                          value={job.details}
+                          onChange={(value) => handleArrayChange("workExperience", i, "details", value)}
+                          className="h-48"
+                          modules={{
+                            toolbar: [
+                              [{ header: [1, 2, 3, false] }],
+                              ["bold", "italic", "underline"],
+                              [{ list: "ordered" }, { list: "bullet" }],
+                              ["link"],
+                            ],
+                          }}
+                        />
+                      </div>
+                    </div>
+
                     <Button type="button" variant="destructive" size="sm" onClick={() => handleRemoveItem("workExperience", i)}>
                       Remove
                     </Button>
@@ -354,7 +483,7 @@ export default function ProfilePage() {
               </div>
 
               <div className="flex justify-end gap-4 pt-8">
-                <Button type="button" variant="outline" onClick={() => { setIsEditMode(false); setImagePreview(null); }}>
+                <Button type="button" variant="outline" onClick={() => setIsEditMode(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={isPending}>
@@ -363,10 +492,8 @@ export default function ProfilePage() {
               </div>
             </form>
           ) : (
-            /* ==================== VIEW MODE ==================== */
+            /* VIEW MODE */
             <div className="space-y-12">
-
-              {/* Name & Bio */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Name</p>
@@ -378,7 +505,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* About */}
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-2">About</p>
                 <p className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">
@@ -386,7 +512,31 @@ export default function ProfilePage() {
                 </p>
               </div>
 
-              {/* Social Links */}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-4">Skills</p>
+                {user?.skills && user.skills.length > 0 ? (
+                  <div className="space-y-6">
+                    {user.skills.map((group, idx) => (
+                      <div key={idx}>
+                        <h4 className="font-semibold text-foreground/90 mb-2">{group.skillTile}</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {group.skillName.map((skill, i) => (
+                            <span
+                              key={i}
+                              className="inline-block px-4 py-1 rounded-xl text-sm font-medium bg-background text-foreground border border-border/50 shadow-sm"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No skills added yet.</p>
+                )}
+              </div>
+
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-4">Social Links</p>
                 <div className="flex flex-wrap gap-6">
@@ -409,13 +559,12 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Education */}
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-4">Education</p>
                 {user?.education && user.education.length > 0 ? (
                   <ul className="space-y-5">
-                    {user.education.map((e: any) => (
-                      <li key={e._id ?? Math.random()} className="border-l-4 border-primary pl-6">
+                    {user.education.map((e: any, i) => (
+                      <li key={e._id ?? i} className="border-l-4 border-primary pl-6">
                         <strong className="text-lg">{e.institution}</strong>
                         <p className="text-foreground">{e.degree}</p>
                         <p className="text-sm text-muted-foreground">{e.timePeriod}</p>
@@ -427,20 +576,20 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Work Experience */}
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-4">Work Experience</p>
                 {user?.workExperience && user.workExperience.length > 0 ? (
                   <div className="space-y-6">
-                    {user.workExperience.map((w: any) => (
-                      <div key={w._id ?? w.title} className="border rounded-lg p-6 bg-muted/30">
+                    {user.workExperience.map((w: any, i) => (
+                      <div key={w._id ?? i} className="border rounded-lg p-6 bg-muted/30">
                         <h4 className="text-xl font-bold">{w.title}</h4>
                         <p className="text-foreground mt-1">
                           {w.designation} · {w.location} · {w.timePeriod}
                         </p>
-                        <p className="mt-3 text-muted-foreground whitespace-pre-wrap">
-                          {w.details || "No details provided."}
-                        </p>
+                        <div
+                          className="mt-3 prose prose-sm max-w-none text-foreground"
+                          dangerouslySetInnerHTML={{ __html: w.details || "No details provided." }}
+                        />
                       </div>
                     ))}
                   </div>
@@ -449,7 +598,6 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Footer */}
               <div className="border-t pt-8 space-y-2 text-sm text-muted-foreground">
                 <p><strong>Email:</strong> {user?.email}</p>
                 <p>
@@ -462,6 +610,6 @@ export default function ProfilePage() {
         </CardContent>
       </Card>
     </div>
-)
-
+  )
 }
+

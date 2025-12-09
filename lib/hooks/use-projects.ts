@@ -13,6 +13,12 @@ export interface Project {
   backendCode: string
   cloudinaryId?: string
   createdAt: string
+  updatedAt: string
+  videoLink?: string
+  technologies: string[]
+  otherPhotos: File[];
+
+
 }
 
 export interface CreateProjectPayload {
@@ -21,9 +27,11 @@ export interface CreateProjectPayload {
   liveLink: string
   frontendCode: string
   backendCode: string
-  timelinePhoto?: File
+  videoLink?: string
+  technologies?: string[]
+  timelinePhoto?: File | null
+  otherPhotos?: File[]
 }
-
 export function useProjects() {
   return useQuery({
     queryKey: ["projects"],

@@ -1,13 +1,14 @@
-// ... existing code up to line 20 ...
 "use client"
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useCreateProject } from "@/lib/hooks/use-projects"
+import { CreateProjectPayload, useCreateProject } from "@/lib/hooks/use-projects"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import dynamic from "next/dynamic"
+import { X } from "lucide-react"
 
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false })
 import "react-quill-new/dist/quill.snow.css"
@@ -26,15 +27,20 @@ export default function ProjectForm({
   isEditMode,
   isPending: externalPending,
   onUpdate,
-}: ProjectFormProps) {
+}: CreateProjectPayload & ProjectFormProps) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     liveLink: "",
     frontendCode: "",
     backendCode: "",
+    videoLink: "",
+    technologies: [] as string[],
     timelinePhoto: null as File | null,
+    otherPhotos: [] as File[],
   })
+
+  const [techInput, setTechInput] = useState("")
 
   useEffect(() => {
     if (project && isEditMode) {
@@ -44,7 +50,10 @@ export default function ProjectForm({
         liveLink: project.liveLink || "",
         frontendCode: project.frontendCode || "",
         backendCode: project.backendCode || "",
+        videoLink: project.videoLink || "",
+        technologies: project.technologies || [],
         timelinePhoto: null,
+        otherPhotos: [],
       })
     }
   }, [project, isEditMode])
@@ -52,16 +61,25 @@ export default function ProjectForm({
   const { mutate: createProject, isPending } = useCreateProject()
   const { toast } = useToast()
 
+  const addTechnology = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && techInput.trim()) {
+      e.preventDefault()
+      if (!formData.technologies.includes(techInput.trim())) {
+        setFormData({ ...formData, technologies: [...formData.technologies, techInput.trim()] })
+      }
+      setTechInput("")
+    }
+  }
+
+  const removeTechnology = (tech: string) => {
+    setFormData({ ...formData, technologies: formData.technologies.filter(t => t !== tech) })
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (
-      !formData.name ||
-      !formData.description ||
-      !formData.liveLink ||
-      !formData.frontendCode ||
-      !formData.backendCode
-    ) {
+    const required = !formData.name || !formData.description || !formData.liveLink || !formData.frontendCode || !formData.backendCode
+    if (required) {
       toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" })
       return
     }
@@ -82,40 +100,35 @@ export default function ProjectForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Project Name */}
       <div>
-        <label className="text-sm font-medium">Project Name *</label>
+        <Label>Project Name *</Label>
         <Input
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="Project name"
+          placeholder="My Awesome Project"
           required
         />
       </div>
 
+      {/* Description */}
       <div>
-        <label className="text-sm font-medium">Description (Rich Text) *</label>
-        <div className="bg-white rounded border border-input">
+        <Label>Description (Rich Text) *</Label>
+        <div className="bg-white dark:bg-black rounded-lg border border-input overflow-hidden">
           <ReactQuill
             value={formData.description}
             onChange={(value) => setFormData({ ...formData, description: value })}
             theme="snow"
-            modules={{
-              toolbar: [
-                [{ header: [1, 2, 3, false] }],
-                ["bold", "italic", "underline", "strike"],
-                ["blockquote", "code-block"],
-                [{ list: "ordered" }, { list: "bullet" }],
-                ["link", "image"],
-              ],
-            }}
+            className="h-64"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {/* Links Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm font-medium">Live Link *</label>
+          <Label>Live Link *</Label>
           <Input
             value={formData.liveLink}
             onChange={(e) => setFormData({ ...formData, liveLink: e.target.value })}
@@ -123,20 +136,19 @@ export default function ProjectForm({
             required
           />
         </div>
-
         <div>
-          <label className="text-sm font-medium">Timeline Photo</label>
+          <Label>Video Demo Link</Label>
           <Input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setFormData({ ...formData, timelinePhoto: e.target.files?.[0] || null })}
+            value={formData.videoLink}
+            onChange={(e) => setFormData({ ...formData, videoLink: e.target.value })}
+            placeholder="https://youtube.com/..."
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm font-medium">Frontend Code Link *</label>
+          <Label>Frontend Code Link *</Label>
           <Input
             value={formData.frontendCode}
             onChange={(e) => setFormData({ ...formData, frontendCode: e.target.value })}
@@ -144,9 +156,8 @@ export default function ProjectForm({
             required
           />
         </div>
-
         <div>
-          <label className="text-sm font-medium">Backend Code Link *</label>
+          <Label>Backend Code Link *</Label>
           <Input
             value={formData.backendCode}
             onChange={(e) => setFormData({ ...formData, backendCode: e.target.value })}
@@ -156,7 +167,59 @@ export default function ProjectForm({
         </div>
       </div>
 
-      <Button type="submit" disabled={externalPending || isPending} className="w-full">
+      {/* Technologies */}
+      <div>
+        <Label>Technologies (Press Enter to add)</Label>
+        <Input
+          value={techInput}
+          onChange={(e) => setTechInput(e.target.value)}
+          onKeyDown={addTechnology}
+          placeholder="React, Node.js, Tailwind..."
+        />
+        <div className="flex flex-wrap gap-2 mt-3">
+          {formData.technologies.map((tech) => (
+            <span
+              key={tech}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-primary text-primary-foreground"
+            >
+              {tech}
+              <button type="button" onClick={() => removeTechnology(tech)}>
+                <X size={14} />
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* File Uploads */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label>Timeline Photo (Main Image)</Label>
+          <Input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setFormData({ ...formData, timelinePhoto: e.target.files?.[0] || null })}
+          />
+        </div>
+        <div>
+          <Label>Other Photos (Multiple)</Label>
+          <Input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => {
+              const files = Array.from(e.target.files || [])
+              setFormData({ ...formData, otherPhotos: files })
+            }}
+          />
+          {formData.otherPhotos.length > 0 && (
+            <p className="text-xs text-foreground/60 mt-1">{formData.otherPhotos.length} file(s) selected</p>
+          )}
+        </div>
+      </div>
+
+      {/* Submit */}
+      <Button type="submit" size="lg" className="w-full" disabled={externalPending || isPending}>
         {externalPending ? "Updating..." : isPending ? "Creating..." : isEditMode ? "Update Project" : "Create Project"}
       </Button>
     </form>
