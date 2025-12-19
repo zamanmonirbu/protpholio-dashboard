@@ -19,6 +19,19 @@ export interface Blog {
   updatedAt: string
 }
 
+
+export interface PaginatedBlogs {
+  blogs: Blog[]
+  pagination: {
+    currentPage: number
+    totalPages: number
+    totalBlogs: number
+    limit: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  }
+}
+
 export interface CreateBlogPayload {
   title: string
   content: string
@@ -30,13 +43,16 @@ export interface CreateBlogPayload {
   featuredImage?: File
 }
 
-export function useBlogs() {
+export function useBlogs(page: number = 1) {
   return useQuery({
-    queryKey: ["blogs"],
+    queryKey: ["blogs", page],
     queryFn: async () => {
-      const response = await apiClient.get<Blog[]>("/blog")
+      const response = await apiClient.get<PaginatedBlogs>(
+        `/blog?page=${page}`
+      )
       return response.data
     },
+    placeholderData: (previousData) => previousData,
   })
 }
 

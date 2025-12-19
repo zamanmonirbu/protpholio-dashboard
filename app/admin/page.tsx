@@ -7,13 +7,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 export default function AdminDashboard() {
   const { data: user } = useUser()
-  const { data: projects } = useProjects()
-  const { data: blogs } = useBlogs()
+  const { data: projectsData } = useProjects()
+  const { data: blogs } = useBlogs();
+  console.log("blogs", blogs)
+
+  const projectPagination = projectsData?.pagination
+  const blogPagination = blogs?.pagination
+
+
 
   const stats = [
-    { label: "Total Projects", value: projects?.length || 0 },
-    { label: "Total Blogs", value: blogs?.length || 0 },
-    { label: "Published Blogs", value: blogs?.filter((b) => b.published).length || 0 },
+    { label: "Total Projects", value: projectPagination?.totalProjects || 0 },
+    { label: "Total Blogs",  value: blogPagination?.totalBlogs || 0 },
   ]
 
   return (
@@ -23,7 +28,7 @@ export default function AdminDashboard() {
         <p className="text-muted-foreground mt-2">Here's an overview of your portfolio</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {stats.map((stat) => (
           <Card key={stat.label}>
             <CardHeader className="pb-2">

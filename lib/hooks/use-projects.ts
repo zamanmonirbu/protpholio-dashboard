@@ -32,13 +32,28 @@ export interface CreateProjectPayload {
   timelinePhoto?: File | null
   otherPhotos?: File[]
 }
-export function useProjects() {
+
+
+export interface ProjectsResponse {
+  projects: Project[]
+  pagination: {
+    currentPage: number
+    totalPages: number
+    totalProjects: number
+    limit: number
+    hasNextPage: boolean
+    hasPrevPage: boolean
+  }
+}
+
+export function useProjects(page: number = 1) {
   return useQuery({
-    queryKey: ["projects"],
+    queryKey: ["projects", page],
     queryFn: async () => {
-      const response = await apiClient.get<Project[]>("/project")
+      const response = await apiClient.get<ProjectsResponse>(`/project?page=${page}`)
       return response.data
     },
+    placeholderData: (previousData) => previousData,
   })
 }
 
