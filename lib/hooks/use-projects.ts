@@ -59,16 +59,44 @@ export function useCreateProject() {
   return useMutation({
     mutationFn: async (payload: CreateProjectPayload) => {
       const formData = new FormData()
+
+      // Required fields
       formData.append("name", payload.name)
       formData.append("description", payload.description)
       formData.append("liveLink", payload.liveLink)
       formData.append("frontendCode", payload.frontendCode)
       formData.append("backendCode", payload.backendCode)
+
+      // Optional scalar fields
+      if (payload.videoLink) {
+        formData.append("videoLink", payload.videoLink)
+      }
+
+      // Technologies (array)
+      if (payload.technologies && payload.technologies.length > 0) {
+        payload.technologies.forEach((tech) => {
+          formData.append("technologies[]", tech)
+        })
+      }
+
+      // Timeline photo
       if (payload.timelinePhoto) {
         formData.append("timelinePhoto", payload.timelinePhoto)
       }
 
-      const response = await apiClient.post<Project>("/project", formData, true)
+      // Other photos (multiple)
+      if (payload.otherPhotos && payload.otherPhotos.length > 0) {
+        payload.otherPhotos.forEach((file) => {
+          formData.append("otherPhotos", file)
+        })
+      }
+
+      const response = await apiClient.post<Project>(
+        "/project",
+        formData,
+        true // multipart flag
+      )
+
       return response.data
     },
     onSuccess: () => {
@@ -83,14 +111,36 @@ export function useUpdateProject() {
   return useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: Partial<CreateProjectPayload> }) => {
       const formData = new FormData()
+
       if (payload.name) formData.append("name", payload.name)
       if (payload.description) formData.append("description", payload.description)
       if (payload.liveLink) formData.append("liveLink", payload.liveLink)
       if (payload.frontendCode) formData.append("frontendCode", payload.frontendCode)
       if (payload.backendCode) formData.append("backendCode", payload.backendCode)
-      if (payload.timelinePhoto) formData.append("timelinePhoto", payload.timelinePhoto)
+      if (payload.videoLink) formData.append("videoLink", payload.videoLink)
 
-      const response = await apiClient.put<Project>(`/project/${id}`, formData, true)
+      if (payload.technologies) {
+        payload.technologies.forEach((tech) => {
+          formData.append("technologies[]", tech)
+        })
+      }
+
+      if (payload.timelinePhoto) {
+        formData.append("timelinePhoto", payload.timelinePhoto)
+      }
+
+      if (payload.otherPhotos) {
+        payload.otherPhotos.forEach((file) => {
+          formData.append("otherPhotos", file)
+        })
+      }
+
+      const response = await apiClient.put<Project>(
+        `/project/${id}`,
+        formData,
+        true
+      )
+
       return response.data
     },
     onSuccess: () => {
